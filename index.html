@@ -1,0 +1,1116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>RL Agent Dashboard — Grid World Navigator</title>
+  <meta name="description" content="Interactive Reinforcement Learning agent using Q-Learning to navigate a Grid World maze. Visualizes Q-values, policy, and learning curves in real time." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg-deep:    #060b18;
+      --bg-panel:   rgba(12, 20, 40, 0.85);
+      --bg-card:    rgba(18, 28, 55, 0.9);
+      --border:     rgba(80, 120, 220, 0.18);
+      --border-hi:  rgba(100, 180, 255, 0.35);
+      --cyan:       #00e5ff;
+      --cyan-dim:   #00b8d4;
+      --purple:     #b06aff;
+      --purple-dim: #7c3aed;
+      --green:      #00e676;
+      --red:        #ff1744;
+      --orange:     #ff6d00;
+      --yellow:     #ffd600;
+      --text-pri:   #e8f0ff;
+      --text-sec:   #8899bb;
+      --text-muted: #445577;
+      --glow-cyan:  0 0 20px rgba(0,229,255,0.4);
+      --glow-pur:   0 0 20px rgba(176,106,255,0.4);
+      --radius-lg:  16px;
+      --radius-md:  10px;
+      --radius-sm:  6px;
+    }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: 'Outfit', sans-serif;
+      background: var(--bg-deep);
+      color: var(--text-pri);
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+    body::before {
+      content: '';
+      position: fixed; inset: 0; z-index: 0;
+      background:
+        radial-gradient(ellipse 80% 50% at 20% 20%, rgba(100,60,255,0.08) 0%, transparent 60%),
+        radial-gradient(ellipse 60% 40% at 80% 80%, rgba(0,180,255,0.07) 0%, transparent 60%),
+        repeating-linear-gradient(0deg, transparent, transparent 60px, rgba(60,100,200,0.03) 60px, rgba(60,100,200,0.03) 61px),
+        repeating-linear-gradient(90deg, transparent, transparent 60px, rgba(60,100,200,0.03) 60px, rgba(60,100,200,0.03) 61px);
+      pointer-events: none;
+    }
+    .app-wrapper { position: relative; z-index: 1; display: flex; flex-direction: column; min-height: 100vh; }
+    header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 16px 32px;
+      background: rgba(6, 11, 24, 0.95);
+      border-bottom: 1px solid var(--border);
+      backdrop-filter: blur(20px);
+      position: sticky; top: 0; z-index: 100;
+    }
+    .header-left { display: flex; align-items: center; gap: 14px; }
+    .logo-icon {
+      width: 44px; height: 44px; border-radius: 12px;
+      background: linear-gradient(135deg, var(--purple-dim), var(--cyan-dim));
+      display: flex; align-items: center; justify-content: center;
+      font-size: 22px; box-shadow: var(--glow-pur);
+    }
+    .header-title { font-size: 20px; font-weight: 700; letter-spacing: -0.3px; }
+    .header-title span { color: var(--cyan); }
+    .header-subtitle { font-size: 11px; color: var(--text-sec); font-weight: 400; margin-top: 2px; }
+    .header-badge {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 6px 14px; border-radius: 20px;
+      background: rgba(0,230,118,0.12); border: 1px solid rgba(0,230,118,0.3);
+      font-size: 12px; color: var(--green); font-weight: 600;
+      transition: all 0.3s;
+    }
+    .badge-dot {
+      width: 7px; height: 7px; border-radius: 50%; background: var(--green);
+      animation: pulse-dot 1.5s ease-in-out infinite;
+    }
+    @keyframes pulse-dot { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.5;transform:scale(0.7)} }
+    .main {
+      flex: 1; padding: 24px 24px 32px;
+      display: grid;
+      grid-template-columns: 1fr 360px;
+      grid-template-rows: auto auto 1fr;
+      gap: 18px;
+      max-width: 1440px; margin: 0 auto; width: 100%;
+    }
+    .card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      backdrop-filter: blur(16px);
+      transition: border-color 0.3s;
+    }
+    .card:hover { border-color: var(--border-hi); }
+    .card-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 14px 20px 10px;
+      border-bottom: 1px solid var(--border);
+    }
+    .card-title { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: var(--text-sec); }
+    .card-subtitle { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+    .card-body { padding: 16px 18px; }
+    .stats-row {
+      grid-column: 1 / -1;
+      display: grid; grid-template-columns: repeat(6, 1fr); gap: 12px;
+    }
+    .stat-card {
+      background: var(--bg-card); border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: 14px 16px;
+      display: flex; flex-direction: column; gap: 4px;
+      position: relative; overflow: hidden;
+      transition: transform 0.2s, border-color 0.3s;
+    }
+    .stat-card::before {
+      content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px;
+      border-radius: 2px 2px 0 0;
+    }
+    .stat-card.cyan::before  { background: linear-gradient(90deg, var(--cyan), transparent); }
+    .stat-card.purple::before{ background: linear-gradient(90deg, var(--purple), transparent); }
+    .stat-card.green::before { background: linear-gradient(90deg, var(--green), transparent); }
+    .stat-card.orange::before{ background: linear-gradient(90deg, var(--orange), transparent); }
+    .stat-card.yellow::before{ background: linear-gradient(90deg, var(--yellow), transparent); }
+    .stat-card.red::before   { background: linear-gradient(90deg, var(--red), transparent); }
+    .stat-card:hover { transform: translateY(-2px); border-color: var(--border-hi); }
+    .stat-label { font-size: 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.7px; font-weight: 600; }
+    .stat-value { font-size: 24px; font-weight: 800; font-family: 'JetBrains Mono', monospace; }
+    .stat-card.cyan .stat-value   { color: var(--cyan); }
+    .stat-card.purple .stat-value { color: var(--purple); }
+    .stat-card.green .stat-value  { color: var(--green); }
+    .stat-card.orange .stat-value { color: var(--orange); }
+    .stat-card.yellow .stat-value { color: var(--yellow); }
+    .stat-card.red .stat-value    { color: var(--red); }
+    .stat-sub { font-size: 10px; color: var(--text-muted); }
+    .grid-section { display: flex; flex-direction: column; }
+    .grid-section .card-body { flex: 1; display: flex; flex-direction: column; align-items: center; padding: 14px; }
+    #grid-canvas { border-radius: var(--radius-md); display: block; box-shadow: 0 0 60px rgba(0,180,255,0.08); max-width: 100%; }
+    .grid-legend { display: flex; gap: 16px; margin-top: 12px; flex-wrap: wrap; justify-content: center; }
+    .legend-item { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--text-sec); }
+    .legend-dot { width: 12px; height: 12px; border-radius: 3px; }
+    .right-panel { display: flex; flex-direction: column; gap: 16px; }
+    .controls { display: flex; flex-direction: column; gap: 12px; }
+    .btn-group { display: flex; gap: 8px; }
+    .btn {
+      flex: 1; padding: 11px 8px; border: none; border-radius: var(--radius-md);
+      font-family: 'Outfit', sans-serif; font-size: 13px; font-weight: 600;
+      cursor: pointer; transition: all 0.2s; letter-spacing: 0.2px;
+    }
+    .btn-primary {
+      background: linear-gradient(135deg, var(--purple-dim), var(--cyan-dim));
+      color: #fff; box-shadow: 0 4px 20px rgba(100,60,255,0.35);
+    }
+    .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 6px 28px rgba(100,60,255,0.55); }
+    .btn-secondary {
+      background: rgba(255,255,255,0.05); border: 1px solid var(--border);
+      color: var(--text-sec);
+    }
+    .btn-secondary:hover { background: rgba(255,255,255,0.1); color: var(--text-pri); border-color: var(--border-hi); }
+    .btn-danger { background: rgba(255,23,68,0.1); border: 1px solid rgba(255,23,68,0.25); color: var(--red); }
+    .btn-danger:hover { background: rgba(255,23,68,0.2); }
+    .param-row { display: flex; flex-direction: column; gap: 5px; }
+    .param-label-row { display: flex; justify-content: space-between; align-items: center; }
+    .param-name { font-size: 12px; color: var(--text-sec); font-weight: 500; }
+    .param-val { font-size: 12px; font-family: 'JetBrains Mono', monospace; color: var(--cyan); font-weight: 600; }
+    input[type=range] {
+      -webkit-appearance: none; appearance: none;
+      width: 100%; height: 4px; border-radius: 4px;
+      background: rgba(255,255,255,0.08); outline: none; cursor: pointer;
+    }
+    input[type=range]::-webkit-slider-thumb {
+      -webkit-appearance: none; appearance: none;
+      width: 16px; height: 16px; border-radius: 50%;
+      background: linear-gradient(135deg, var(--purple), var(--cyan));
+      cursor: pointer; box-shadow: 0 0 8px rgba(0,229,255,0.5);
+      transition: transform 0.15s;
+    }
+    input[type=range]::-webkit-slider-thumb:hover { transform: scale(1.25); }
+    .speed-group { display: flex; gap: 5px; align-items: center; }
+    .speed-label { font-size: 12px; color: var(--text-sec); font-weight: 500; white-space: nowrap; margin-right: 2px; }
+    .speed-btn {
+      flex: 1; padding: 6px 2px; border: 1px solid var(--border);
+      background: rgba(255,255,255,0.04); border-radius: 6px;
+      color: var(--text-sec); font-size: 11px; font-family: 'Outfit', sans-serif;
+      cursor: pointer; transition: all 0.15s; font-weight: 600; text-align: center;
+    }
+    .speed-btn.active { background: rgba(0,229,255,0.12); border-color: var(--cyan); color: var(--cyan); }
+    .speed-btn:hover:not(.active) { border-color: var(--border-hi); color: var(--text-pri); }
+    .select-row { display: flex; gap: 8px; align-items: center; }
+    .select-label { font-size: 12px; color: var(--text-sec); white-space: nowrap; font-weight: 500; }
+    select {
+      flex: 1; padding: 7px 10px; background: rgba(12,20,40,0.95);
+      border: 1px solid var(--border); border-radius: var(--radius-sm);
+      color: var(--text-pri); font-family: 'Outfit', sans-serif; font-size: 12px;
+      outline: none; cursor: pointer; appearance: none;
+    }
+    select:focus { border-color: var(--cyan); }
+    #chart-canvas { display: block; width: 100%; }
+    .chart-wrap { position: relative; }
+    #policy-canvas { display: block; width: 100%; border-radius: 8px; }
+    .about-section {
+      grid-column: 1 / -1;
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px;
+    }
+    .about-card {
+      background: var(--bg-card); border: 1px solid var(--border);
+      border-radius: var(--radius-md); padding: 20px;
+      display: flex; flex-direction: column; gap: 8px;
+    }
+    .about-icon { font-size: 24px; }
+    .about-title { font-size: 14px; font-weight: 700; color: var(--text-pri); }
+    .about-desc { font-size: 12px; color: var(--text-sec); line-height: 1.65; }
+    .formula {
+      font-family: 'JetBrains Mono', monospace; font-size: 11px;
+      color: var(--cyan); background: rgba(0,229,255,0.05);
+      border: 1px solid rgba(0,229,255,0.15); border-radius: 8px;
+      padding: 10px 12px; margin-top: 4px; line-height: 1.7; white-space: pre-wrap;
+    }
+    .tab-row { display: flex; gap: 4px; padding: 4px; background: rgba(255,255,255,0.04); border-radius: 8px; }
+    .tab-btn {
+      flex: 1; padding: 6px; border: none; border-radius: 6px;
+      background: transparent; color: var(--text-muted);
+      font-family: 'Outfit', sans-serif; font-size: 11px; font-weight: 600;
+      cursor: pointer; transition: all 0.2s; letter-spacing: 0.2px; text-transform: uppercase;
+    }
+    .tab-btn.active { background: rgba(0,229,255,0.12); color: var(--cyan); }
+    .tab-btn:hover:not(.active) { color: var(--text-sec); }
+    .status-bar {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 8px 14px; margin: 10px 0 0; width: 100%;
+      background: rgba(0,0,0,0.25); border-radius: 8px;
+      font-size: 11px; color: var(--text-muted);
+    }
+    .status-msg { display: flex; align-items: center; gap: 7px; }
+    .status-indicator {
+      width: 7px; height: 7px; border-radius: 50%;
+      background: var(--text-muted); transition: background 0.3s; flex-shrink: 0;
+    }
+    .status-indicator.running { background: var(--green); animation: pulse-dot 1.5s ease-in-out infinite; }
+    .status-indicator.done { background: var(--cyan); }
+    .tip-box {
+      padding: 10px 12px; background: rgba(0,229,255,0.04);
+      border: 1px solid rgba(0,229,255,0.1); border-radius: 8px;
+      font-size: 10px; color: var(--text-muted); line-height: 1.5;
+    }
+    footer {
+      text-align: center; padding: 16px 24px;
+      border-top: 1px solid var(--border);
+      font-size: 11px; color: var(--text-muted);
+    }
+    footer a { color: var(--cyan); text-decoration: none; }
+    footer a:hover { text-decoration: underline; }
+    @keyframes fadeInUp {
+      from { opacity: 0; transform: translateY(14px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    .card, .stat-card, .about-card { animation: fadeInUp 0.45s ease both; }
+    #toast {
+      position: fixed; bottom: 24px; right: 24px; z-index: 200;
+      padding: 12px 22px; border-radius: 10px;
+      background: rgba(0,230,118,0.12); border: 1px solid rgba(0,230,118,0.35);
+      color: var(--green); font-size: 13px; font-weight: 600;
+      transform: translateY(80px); opacity: 0; transition: all 0.35s;
+      pointer-events: none;
+    }
+    #toast.show { transform: translateY(0); opacity: 1; }
+    .kbd {
+      display: inline-block; padding: 1px 5px;
+      background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15);
+      border-radius: 4px; font-family: 'JetBrains Mono', monospace;
+      font-size: 10px; color: var(--text-sec);
+    }
+    @media (max-width: 1100px) {
+      .main { grid-template-columns: 1fr; }
+      .stats-row { grid-template-columns: repeat(3, 1fr); }
+      .about-section { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 680px) {
+      .stats-row { grid-template-columns: repeat(2, 1fr); }
+      header { padding: 12px 16px; }
+      .main { padding: 12px 10px; gap: 12px; }
+      .header-title { font-size: 16px; }
+    }
+  </style>
+</head>
+<body>
+<div class="app-wrapper">
+
+  <header>
+    <div class="header-left">
+      <div class="logo-icon">&#x1F916;</div>
+      <div>
+        <div class="header-title">RL <span>Grid World</span> Navigator</div>
+        <div class="header-subtitle">Q-Learning &amp; SARSA Agent &nbsp;&#xB7;&nbsp; Maze Navigation &nbsp;&#xB7;&nbsp; Real-time Visualization</div>
+      </div>
+    </div>
+    <div style="display:flex;align-items:center;gap:12px">
+      <div style="font-size:11px;color:var(--text-muted);text-align:right;display:none" id="kb-hints">
+        <span class="kbd">Space</span> Train &nbsp;
+        <span class="kbd">R</span> Reset &nbsp;
+        <span class="kbd">D</span> Demo
+      </div>
+      <div id="status-badge" class="header-badge"><div class="badge-dot"></div> Ready</div>
+    </div>
+  </header>
+
+  <div class="main">
+
+    <!-- STATS -->
+    <div class="stats-row">
+      <div class="stat-card cyan" style="animation-delay:.05s">
+        <div class="stat-label">Episode</div>
+        <div class="stat-value" id="stat-episode">0</div>
+        <div class="stat-sub">training episodes</div>
+      </div>
+      <div class="stat-card purple" style="animation-delay:.1s">
+        <div class="stat-label">Steps</div>
+        <div class="stat-value" id="stat-steps">0</div>
+        <div class="stat-sub">steps this episode</div>
+      </div>
+      <div class="stat-card green" style="animation-delay:.15s">
+        <div class="stat-label">Episode Reward</div>
+        <div class="stat-value" id="stat-reward">0</div>
+        <div class="stat-sub">cumulative reward</div>
+      </div>
+      <div class="stat-card orange" style="animation-delay:.2s">
+        <div class="stat-label">Best Reward</div>
+        <div class="stat-value" id="stat-best">&#x2014;</div>
+        <div class="stat-sub">all-time best</div>
+      </div>
+      <div class="stat-card yellow" style="animation-delay:.25s">
+        <div class="stat-label">Epsilon &#x3B5;</div>
+        <div class="stat-value" id="stat-eps">1.00</div>
+        <div class="stat-sub">exploration rate</div>
+      </div>
+      <div class="stat-card red" style="animation-delay:.3s">
+        <div class="stat-label">Successes</div>
+        <div class="stat-value" id="stat-success">0</div>
+        <div class="stat-sub">goal reached count</div>
+      </div>
+    </div>
+
+    <!-- GRID WORLD -->
+    <div class="card grid-section" style="animation-delay:.1s">
+      <div class="card-header">
+        <div>
+          <div class="card-title">&#x1F5FA; Grid World Environment</div>
+          <div class="card-subtitle">Agent navigates from &#x1F7E2; Start to &#x1F3AF; Goal avoiding &#x1F534; Walls &amp; &#x26A0; Traps</div>
+        </div>
+        <div class="tab-row" id="view-tabs">
+          <button class="tab-btn active" data-view="agent" onclick="setView('agent')">Agent</button>
+          <button class="tab-btn" data-view="qvalue" onclick="setView('qvalue')">Q-Heat</button>
+          <button class="tab-btn" data-view="policy" onclick="setView('policy')">Policy</button>
+        </div>
+      </div>
+      <div class="card-body">
+        <canvas id="grid-canvas"></canvas>
+        <div class="status-bar">
+          <div class="status-msg">
+            <div class="status-indicator" id="run-indicator"></div>
+            <span id="status-text">Press Start Training to begin</span>
+          </div>
+          <span id="pos-text" style="font-family:'JetBrains Mono',monospace;font-size:11px">pos: [&#x2014;,&#x2014;]</span>
+        </div>
+        <div class="grid-legend">
+          <div class="legend-item"><div class="legend-dot" style="background:#00e676"></div>Start</div>
+          <div class="legend-item"><div class="legend-dot" style="background:#00e5ff;border-radius:50%"></div>Agent</div>
+          <div class="legend-item"><div class="legend-dot" style="background:#ffd600"></div>Goal (+100)</div>
+          <div class="legend-item"><div class="legend-dot" style="background:rgba(255,23,68,0.3)"></div>Wall (&#x2212;5)</div>
+          <div class="legend-item"><div class="legend-dot" style="background:#0e1a35"></div>Free (&#x2212;0.5)</div>
+          <div class="legend-item"><div class="legend-dot" style="background:rgba(255,109,0,0.4)"></div>Trap (&#x2212;10)</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- RIGHT PANEL -->
+    <div class="right-panel">
+
+      <div class="card" style="animation-delay:.2s">
+        <div class="card-header">
+          <div class="card-title">&#x2699; Controls &amp; Hyperparameters</div>
+        </div>
+        <div class="card-body controls">
+
+          <div class="select-row">
+            <span class="select-label">Maze:</span>
+            <select id="maze-select" onchange="onMazeChange()">
+              <option value="simple">Simple (8&#xD7;8)</option>
+              <option value="medium" selected>Medium (12&#xD7;12)</option>
+              <option value="hard">Hard (16&#xD7;16)</option>
+              <option value="spiral">Custom Spiral (12&#xD7;12)</option>
+            </select>
+          </div>
+
+          <div class="select-row">
+            <span class="select-label">Algorithm:</span>
+            <select id="algo-select">
+              <option value="qlearn" selected>Q-Learning (Off-Policy)</option>
+              <option value="sarsa">SARSA (On-Policy)</option>
+            </select>
+          </div>
+
+          <div class="btn-group">
+            <button class="btn btn-primary" id="btn-start" onclick="toggleTraining()">&#x25B6; Start Training</button>
+            <button class="btn btn-secondary" onclick="stepOnce()">Step</button>
+          </div>
+          <div class="btn-group">
+            <button class="btn btn-secondary" onclick="runBestPolicy()" id="btn-demo">&#x1F3AC; Demo Best</button>
+            <button class="btn btn-danger" onclick="resetAll()">&#x21BA; Reset</button>
+          </div>
+
+          <div class="speed-group">
+            <span class="speed-label">Speed:</span>
+            <button class="speed-btn" onclick="setSpeed(400,'slow')" data-sid="slow">Slow</button>
+            <button class="speed-btn active" onclick="setSpeed(80,'normal')" data-sid="normal">Normal</button>
+            <button class="speed-btn" onclick="setSpeed(16,'fast')" data-sid="fast">Fast</button>
+            <button class="speed-btn" onclick="setSpeed(0,'turbo')" data-sid="turbo">Turbo</button>
+          </div>
+
+          <div style="padding:6px 0;border-top:1px solid var(--border);font-size:11px;color:var(--text-sec);font-weight:600;letter-spacing:.5px;text-transform:uppercase">Hyperparameters</div>
+
+          <div class="param-row">
+            <div class="param-label-row">
+              <span class="param-name">Learning Rate &#x3B1;</span>
+              <span class="param-val" id="lr-val">0.10</span>
+            </div>
+            <input type="range" id="lr-slider" min="0.01" max="0.9" step="0.01" value="0.10" oninput="updateParam('lr')">
+          </div>
+          <div class="param-row">
+            <div class="param-label-row">
+              <span class="param-name">Discount Factor &#x3B3;</span>
+              <span class="param-val" id="gamma-val">0.95</span>
+            </div>
+            <input type="range" id="gamma-slider" min="0.5" max="0.999" step="0.001" value="0.95" oninput="updateParam('gamma')">
+          </div>
+          <div class="param-row">
+            <div class="param-label-row">
+              <span class="param-name">Epsilon &#x3B5; (start)</span>
+              <span class="param-val" id="eps-val">1.00</span>
+            </div>
+            <input type="range" id="eps-slider" min="0.05" max="1.0" step="0.01" value="1.0" oninput="updateParam('eps')">
+          </div>
+          <div class="param-row">
+            <div class="param-label-row">
+              <span class="param-name">&#x3B5; Decay Rate</span>
+              <span class="param-val" id="decay-val">0.995</span>
+            </div>
+            <input type="range" id="decay-slider" min="0.90" max="0.9999" step="0.0001" value="0.995" oninput="updateParam('decay')">
+          </div>
+
+          <div class="tip-box">
+            &#x1F4A1; <strong>Tip:</strong> Use <strong>Turbo</strong> speed to train 500+ episodes instantly, then switch to <strong>Demo Best</strong> to watch the learned policy. Try <strong>SARSA</strong> for safer (but slower) path learning.
+          </div>
+        </div>
+      </div>
+
+      <div class="card" style="animation-delay:.3s">
+        <div class="card-header">
+          <div class="card-title">&#x1F5FA; Learned Policy Map</div>
+          <div class="card-subtitle">Arrow = best action per cell</div>
+        </div>
+        <div class="card-body" style="padding:10px">
+          <canvas id="policy-canvas" height="200"></canvas>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- LEARNING CURVE -->
+    <div class="card" style="grid-column:1/-1;animation-delay:.4s">
+      <div class="card-header">
+        <div>
+          <div class="card-title">&#x1F4C8; Learning Curve</div>
+          <div class="card-subtitle">Reward per episode &nbsp;&#xB7;&nbsp; <span style="color:var(--purple)">&#x2014;</span> Raw &nbsp; <span style="color:var(--cyan)">&#x2014;</span> Moving Avg (20 eps)</div>
+        </div>
+        <button onclick="exportData()" style="padding:5px 12px;border:1px solid var(--border);background:rgba(255,255,255,0.04);border-radius:6px;color:var(--text-sec);font-size:11px;cursor:pointer;font-family:'Outfit',sans-serif">&#x1F4E5; Export CSV</button>
+      </div>
+      <div class="card-body chart-wrap" style="padding:12px 16px 16px">
+        <canvas id="chart-canvas" height="130"></canvas>
+      </div>
+    </div>
+
+    <!-- ABOUT / THEORY -->
+    <div class="about-section">
+      <div class="about-card" style="animation-delay:.5s">
+        <div class="about-icon">&#x1F9E0;</div>
+        <div class="about-title">Q-Learning Algorithm</div>
+        <div class="about-desc">
+          An <strong style="color:var(--cyan)">off-policy</strong> temporal-difference algorithm. Learns the optimal Q*(s,a) function regardless of which policy the agent follows. Converges to optimal policy given sufficient exploration.
+        </div>
+        <div class="formula">Q(s,a) &larr; Q(s,a) + &alpha;[r + &gamma; max Q(s',a') &minus; Q(s,a)]
+&alpha; = learning rate, &gamma; = discount factor</div>
+      </div>
+      <div class="about-card" style="animation-delay:.55s">
+        <div class="about-icon">&#x1F3B2;</div>
+        <div class="about-title">&epsilon;-Greedy Exploration</div>
+        <div class="about-desc">
+          Balances <strong style="color:var(--cyan)">exploration</strong> (random actions) and <strong style="color:var(--purple)">exploitation</strong> (best known action). &epsilon; decays each episode so the agent gradually shifts from exploring to exploiting.
+        </div>
+        <div class="formula">&pi;(a|s) = random action    if rand &lt; &epsilon;
+         = argmax Q(s,a)  otherwise
+&epsilon; &larr; &epsilon; &times; decay (each episode)</div>
+      </div>
+      <div class="about-card" style="animation-delay:.6s">
+        <div class="about-icon">&#x1F3C6;</div>
+        <div class="about-title">Reward Structure &amp; SARSA</div>
+        <div class="about-desc">
+          The reward function shapes agent behaviour. <strong style="color:var(--green)">SARSA</strong> is on-policy: it uses the actual next action taken, leading to safer but sometimes slower convergence than Q-Learning.
+        </div>
+        <div class="formula">Goal: +100  |  Trap: &minus;10
+Wall hit: &minus;5  |  Each step: &minus;0.5
+SARSA: Q(s,a) &larr; Q(s,a) + &alpha;[r + &gamma; Q(s',a') &minus; Q(s,a)]</div>
+      </div>
+    </div>
+
+  </div>
+
+  <footer>
+    &#x1F916; Reinforcement Learning Assignment &nbsp;&#xB7;&nbsp; Q-Learning &amp; SARSA Grid World Agent &nbsp;&#xB7;&nbsp; Built with HTML5 + Canvas + Vanilla JS
+    &nbsp;&nbsp;<a href="#" onclick="exportData();return false">&#x1F4E5; Export Q-Table</a>
+    &nbsp;&nbsp;<a href="https://github.com" target="_blank">&#x1F517; GitHub</a>
+  </footer>
+</div>
+
+<div id="toast"></div>
+
+<script>
+'use strict';
+
+// ======= MAZE DEFINITIONS =======
+const MAZES = {
+  simple: {
+    rows:8, cols:8, start:[0,0], goal:[7,7],
+    walls:[[1,1],[1,2],[1,3],[2,5],[3,0],[3,1],[4,3],[4,4],[5,6],[6,2],[6,3],[6,5]],
+    traps:[[2,2],[5,4]]
+  },
+  medium: {
+    rows:12, cols:12, start:[0,0], goal:[11,11],
+    walls:[
+      [1,1],[1,2],[1,3],[1,4],[2,6],[2,7],[3,2],[3,3],[3,9],[3,10],
+      [4,0],[4,1],[4,5],[4,6],[5,8],[5,9],[6,2],[6,3],[6,4],[7,6],[7,7],[7,8],
+      [8,1],[8,2],[8,10],[8,11],[9,4],[9,5],[10,7],[10,8],[10,9],[11,3]
+    ],
+    traps:[[2,4],[5,3],[7,5],[9,9],[6,9]]
+  },
+  hard: {
+    rows:16, cols:16, start:[0,0], goal:[15,15],
+    walls:[
+      [1,1],[1,2],[1,3],[1,4],[1,5],[2,7],[2,8],[2,9],[3,3],[3,4],[3,11],[3,12],
+      [4,0],[4,1],[4,6],[4,7],[5,9],[5,10],[5,13],[6,2],[6,3],[6,4],[6,5],[7,7],[7,8],[7,9],
+      [8,1],[8,2],[8,11],[8,12],[9,5],[9,6],[9,14],[9,15],[10,8],[10,9],[10,10],[11,2],[11,3],
+      [12,6],[12,7],[12,12],[12,13],[13,0],[13,1],[13,9],[13,10],[14,4],[14,5],[14,11],[15,3]
+    ],
+    traps:[[2,5],[5,8],[7,11],[10,3],[12,9],[9,13],[14,8]]
+  },
+  spiral: {
+    rows:12, cols:12, start:[0,0], goal:[5,5],
+    walls:[
+      [1,0],[1,1],[1,2],[1,3],[1,4],[1,5],[1,6],[1,7],[1,8],[1,9],[1,10],
+      [3,1],[3,2],[3,3],[3,4],[3,5],[3,6],[3,7],[3,8],[3,9],[3,10],[3,11],
+      [5,0],[5,1],[5,2],[5,3],[5,4],
+      [7,1],[7,2],[7,3],[7,4],[7,5],[7,6],[7,7],[7,8],[7,9],[7,10],[7,11],
+      [9,0],[9,1],[9,2],[9,3],[9,4],[9,5],[9,6],[9,7],[9,8],[9,9],[9,10]
+    ],
+    traps:[[2,11],[4,0],[6,11],[8,0],[10,11]]
+  }
+};
+
+// ======= STATE =======
+let env, agent, loopTimer, loopDelay=80, currentView='agent';
+let episodeRewards=[], movingAvg=[];
+let running=false, demoMode=false;
+let successCount=0, bestReward=-Infinity;
+let state, episodeSteps=0, episodeTotalReward=0, episodeCount=0;
+
+// ======= ENVIRONMENT =======
+class GridEnv {
+  constructor(key) {
+    const m = MAZES[key];
+    this.rows=m.rows; this.cols=m.cols;
+    this.start=m.start.slice(); this.goal=m.goal.slice();
+    this.wallSet=new Set(m.walls.map(([r,c])=>r*m.cols+c));
+    this.trapSet=new Set(m.traps.map(([r,c])=>r*m.cols+c));
+    this.maxSteps=m.rows*m.cols*4;
+    this.reset();
+  }
+  reset(){
+    this.agentPos=this.start.slice();
+    this.done=false; this.stepCount=0; this.totalReward=0;
+    return this.stateIdx();
+  }
+  stateIdx(){ return this.agentPos[0]*this.cols+this.agentPos[1]; }
+  isWall(r,c){ return r<0||c<0||r>=this.rows||c>=this.cols||this.wallSet.has(r*this.cols+c); }
+  get numStates(){ return this.rows*this.cols; }
+  step(action){
+    // 0=up(r-1) 1=down(r+1) 2=left(c-1) 3=right(c+1)
+    const D=[[-1,0],[1,0],[0,-1],[0,1]];
+    const [dr,dc]=D[action];
+    const [r,c]=this.agentPos;
+    const nr=r+dr, nc=c+dc;
+    let reward=-0.5;
+    if(!this.isWall(nr,nc)){ this.agentPos=[nr,nc]; } else { reward=-5; }
+    const idx=this.stateIdx();
+    if(this.agentPos[0]===this.goal[0]&&this.agentPos[1]===this.goal[1]){ reward=100; this.done=true; }
+    else if(this.trapSet.has(idx)){ reward=-10; }
+    this.stepCount++; this.totalReward+=reward;
+    if(this.stepCount>=this.maxSteps) this.done=true;
+    return {state:idx, reward, done:this.done};
+  }
+}
+
+// ======= AGENT =======
+class QAgent {
+  constructor(ns){
+    this.ns=ns; this.na=4;
+    this.alpha=0.10; this.gamma=0.95;
+    this.epsilon=1.0; this.epsilonMin=0.05; this.epsilonDecay=0.995;
+    this.Q=Array.from({length:ns},()=>new Float64Array(4));
+  }
+  act(s){
+    if(Math.random()<this.epsilon) return Math.floor(Math.random()*4);
+    return this.greedyAction(s);
+  }
+  greedyAction(s){
+    const q=this.Q[s]; let b=0;
+    for(let i=1;i<4;i++) if(q[i]>q[b]) b=i;
+    return b;
+  }
+  update(s,a,r,s2,done,algo){
+    const tgt=done?r:r+this.gamma*(algo==='sarsa'?this.Q[s2][this.act(s2)]:Math.max(...this.Q[s2]));
+    this.Q[s][a]+=this.alpha*(tgt-this.Q[s][a]);
+  }
+  decayEps(){ if(this.epsilon>this.epsilonMin) this.epsilon*=this.epsilonDecay; }
+  maxQ(s){ return Math.max(...this.Q[s]); }
+}
+
+// ======= CANVAS =======
+const gc=document.getElementById('grid-canvas'), gctx=gc.getContext('2d');
+const pc=document.getElementById('policy-canvas'), pctx=pc.getContext('2d');
+const cc=document.getElementById('chart-canvas'), cctx=cc.getContext('2d');
+
+function cellSize(){
+  const mw=Math.min(window.innerWidth*0.57,700);
+  const mh=Math.min(window.innerHeight*0.52,560);
+  return Math.max(16, Math.floor(Math.min(mw/env.cols, mh/env.rows)));
+}
+
+function initCanvas(){
+  const cs=cellSize();
+  gc.width=cs*env.cols; gc.height=cs*env.rows; gc.__cs=cs;
+}
+
+function lerp3(a,b,t){ return [a[0]+(b[0]-a[0])*t, a[1]+(b[1]-a[1])*t, a[2]+(b[2]-a[2])*t]; }
+function rgb(c){ return `rgb(${Math.round(c[0])},${Math.round(c[1])},${Math.round(c[2])})`; }
+
+function getQRange(){
+  let mn=Infinity, mx=-Infinity;
+  for(let s=0;s<agent.ns;s++){ const q=agent.maxQ(s); if(q<mn)mn=q; if(q>mx)mx=q; }
+  return {mn, mx: mx===mn?mn+1:mx};
+}
+
+function heatColor(v, mn, mx){
+  const t=Math.max(0,Math.min(1,(v-mn)/(mx-mn)));
+  const cold=[8,14,55], mid=[80,10,160], hot=[0,200,210];
+  return t<0.5?lerp3(cold,mid,t*2):lerp3(mid,hot,(t-0.5)*2);
+}
+
+// Arrow drawing helper
+function drawArrow(ctx, cx, cy, dc, dr, len, lw, color){
+  const ex=cx+dc*len, ey=cy+dr*len;
+  ctx.strokeStyle=color; ctx.lineWidth=lw; ctx.lineCap='round';
+  ctx.beginPath(); ctx.moveTo(cx,cy); ctx.lineTo(ex,ey); ctx.stroke();
+  const ang=Math.atan2(ey-cy,ex-cx), hl=len*0.38;
+  ctx.beginPath();
+  ctx.moveTo(ex,ey);
+  ctx.lineTo(ex-hl*Math.cos(ang-0.45),ey-hl*Math.sin(ang-0.45));
+  ctx.moveTo(ex,ey);
+  ctx.lineTo(ex-hl*Math.cos(ang+0.45),ey-hl*Math.sin(ang+0.45));
+  ctx.stroke();
+}
+
+// Action -> (col-delta, row-delta)
+const ADIR=[[0,-1],[0,1],[-1,0],[1,0]]; // up down left right
+
+function drawGrid(){
+  if(!env||!agent) return;
+  const cs=gc.__cs||40;
+  const ctx=gctx;
+  ctx.clearRect(0,0,gc.width,gc.height);
+  const {rows,cols,agentPos,goal,start,wallSet,trapSet}=env;
+  const {mn,mx}=getQRange();
+  const showQ=currentView==='qvalue'||currentView==='policy';
+
+  for(let r=0;r<rows;r++){
+    for(let c=0;c<cols;c++){
+      const idx=r*cols+c;
+      const x=c*cs, y=r*cs;
+      const isW=wallSet.has(idx), isT=trapSet.has(idx);
+      const isG=r===goal[0]&&c===goal[1], isS=r===start[0]&&c===start[1];
+      const isA=r===agentPos[0]&&c===agentPos[1];
+
+      // Background
+      if(isW){
+        ctx.fillStyle='#060e1e'; ctx.fillRect(x,y,cs,cs);
+        ctx.fillStyle='rgba(255,23,68,0.15)'; ctx.fillRect(x,y,cs,cs);
+        ctx.fillStyle='rgba(255,23,68,0.06)';
+        if((r+c)%2===0){ ctx.fillRect(x,y,cs/2,cs/2); ctx.fillRect(x+cs/2,y+cs/2,cs/2,cs/2); }
+      } else if(showQ&&!isG&&!isS){
+        const col=heatColor(agent.maxQ(idx),mn,mx);
+        ctx.fillStyle=rgb(col)+'cc'; ctx.fillRect(x,y,cs,cs);
+      } else if(isT){
+        ctx.fillStyle='#180808'; ctx.fillRect(x,y,cs,cs);
+        const g=ctx.createRadialGradient(x+cs/2,y+cs/2,0,x+cs/2,y+cs/2,cs/2);
+        g.addColorStop(0,'rgba(255,109,0,0.35)'); g.addColorStop(1,'transparent');
+        ctx.fillStyle=g; ctx.fillRect(x,y,cs,cs);
+      } else {
+        ctx.fillStyle='#0e1a35'; ctx.fillRect(x,y,cs,cs);
+      }
+
+      // Grid line
+      ctx.strokeStyle='rgba(30,55,110,0.4)'; ctx.lineWidth=0.5;
+      ctx.strokeRect(x+0.25,y+0.25,cs-0.5,cs-0.5);
+
+      // Special cells
+      if(isG){
+        const g=ctx.createRadialGradient(x+cs/2,y+cs/2,0,x+cs/2,y+cs/2,cs/2);
+        g.addColorStop(0,'rgba(255,214,0,0.5)'); g.addColorStop(1,'rgba(255,214,0,0.05)');
+        ctx.fillStyle=g; ctx.fillRect(x,y,cs,cs);
+        if(cs>18){ ctx.fillStyle='#ffd600'; ctx.font=`${Math.round(cs*0.52)}px serif`; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText('\uD83C\uDFAF',x+cs/2,y+cs/2+1); }
+      } else if(isS&&!isA){
+        ctx.fillStyle='rgba(0,230,118,0.12)'; ctx.fillRect(x,y,cs,cs);
+        if(cs>22){ ctx.fillStyle='rgba(0,230,118,0.7)'; ctx.font=`bold ${Math.round(cs*0.38)}px Outfit`; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText('S',x+cs/2,y+cs/2); }
+      } else if(isT&&!isW){
+        if(cs>20){ ctx.fillStyle='#ff6d00'; ctx.font=`${Math.round(cs*0.42)}px serif`; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText('\u26A0',x+cs/2,y+cs/2); }
+      }
+
+      // Policy arrows
+      if(!isW&&!isG&&(currentView==='policy'||(currentView==='qvalue'&&cs>22))){
+        const ba=agent.greedyAction(idx);
+        const [dc2,dr2]=ADIR[ba];
+        const q=agent.maxQ(idx), t=Math.max(0,Math.min(1,(q-mn)/(mx-mn)));
+        const alpha=currentView==='policy'?0.9:0.4;
+        const col=`rgba(${Math.round(t*20)},${Math.round(180+t*40)},${Math.round(220-t*80)},${alpha})`;
+        drawArrow(ctx,x+cs/2,y+cs/2,dc2,dr2,cs*0.3,Math.max(1,cs*0.07),col);
+      }
+
+      // Agent glyph
+      if(isA&&!isW){
+        const t2=performance.now()/1000;
+        const pulse=0.85+0.15*Math.sin(t2*4);
+        const rad=cs/2*0.52*pulse;
+        const glow=ctx.createRadialGradient(x+cs/2,y+cs/2,0,x+cs/2,y+cs/2,rad*2.5);
+        glow.addColorStop(0,'rgba(0,229,255,0.45)');
+        glow.addColorStop(0.5,'rgba(0,180,255,0.15)');
+        glow.addColorStop(1,'transparent');
+        ctx.fillStyle=glow; ctx.fillRect(x,y,cs,cs);
+        ctx.fillStyle='#00e5ff';
+        ctx.beginPath(); ctx.arc(x+cs/2,y+cs/2,rad,0,Math.PI*2); ctx.fill();
+        ctx.fillStyle='rgba(255,255,255,0.45)';
+        ctx.beginPath(); ctx.arc(x+cs/2-rad*0.22,y+cs/2-rad*0.22,rad*0.28,0,Math.PI*2); ctx.fill();
+      }
+    }
+  }
+}
+
+// Policy mini canvas
+function drawPolicy(){
+  if(!env||!agent) return;
+  const W=pc.parentElement.clientWidth-18;
+  const cs=Math.max(8,Math.floor(W/env.cols));
+  pc.width=cs*env.cols; pc.height=cs*env.rows;
+  const ctx=pctx; ctx.clearRect(0,0,pc.width,pc.height);
+  const {rows,cols,wallSet,goal}=env;
+  const {mn,mx}=getQRange();
+  for(let r=0;r<rows;r++){
+    for(let c=0;c<cols;c++){
+      const idx=r*cols+c, x=c*cs, y=r*cs;
+      const isW=wallSet.has(idx), isG=r===goal[0]&&c===goal[1];
+      if(isW){
+        ctx.fillStyle='rgba(255,23,68,0.18)'; ctx.fillRect(x,y,cs,cs);
+      } else if(isG){
+        ctx.fillStyle='rgba(255,214,0,0.28)'; ctx.fillRect(x,y,cs,cs);
+      } else {
+        const col=heatColor(agent.maxQ(idx),mn,mx);
+        ctx.fillStyle=rgb(col)+'bb'; ctx.fillRect(x,y,cs,cs);
+        const ba=agent.greedyAction(idx);
+        const [dc2,dr2]=ADIR[ba];
+        drawArrow(ctx,x+cs/2,y+cs/2,dc2,dr2,cs*0.32,Math.max(0.8,cs*0.08),'rgba(0,220,255,0.75)');
+      }
+      ctx.strokeStyle='rgba(20,40,90,0.5)'; ctx.lineWidth=0.5;
+      ctx.strokeRect(x+0.25,y+0.25,cs-0.5,cs-0.5);
+    }
+  }
+}
+
+// Learning curve chart
+function drawChart(){
+  const W=cc.parentElement.clientWidth-28;
+  cc.width=W; cc.height=130;
+  const ctx=cctx, pad={t:12,r:18,b:28,l:48};
+  const pw=W-pad.l-pad.r, ph=130-pad.t-pad.b;
+  ctx.clearRect(0,0,W,130);
+
+  // Grid lines
+  ctx.strokeStyle='rgba(40,70,130,0.25)'; ctx.lineWidth=1;
+  for(let i=0;i<=4;i++){
+    const yy=pad.t+ph*i/4;
+    ctx.beginPath(); ctx.moveTo(pad.l,yy); ctx.lineTo(pad.l+pw,yy); ctx.stroke();
+  }
+
+  const data=episodeRewards;
+  if(data.length<2){ ctx.fillStyle='rgba(100,130,200,0.4)'; ctx.font='11px Outfit'; ctx.textAlign='center'; ctx.fillText('Train the agent to see learning progress',pad.l+pw/2,pad.t+ph/2); return; }
+
+  const minY=Math.min(...data), maxY=Math.max(...data), rangeY=maxY-minY||1;
+  const toX=i=>pad.l+(i/(data.length-1))*pw;
+  const toY=v=>pad.t+ph-((v-minY)/rangeY)*ph;
+
+  // Raw area + line
+  const rawG=ctx.createLinearGradient(pad.l,0,pad.l+pw,0);
+  rawG.addColorStop(0,'rgba(120,70,255,0.5)'); rawG.addColorStop(1,'rgba(0,229,255,0.5)');
+  ctx.globalAlpha=0.08; ctx.fillStyle=rawG;
+  ctx.beginPath(); ctx.moveTo(toX(0),pad.t+ph);
+  data.forEach((v,i)=>ctx.lineTo(toX(i),toY(v)));
+  ctx.lineTo(toX(data.length-1),pad.t+ph); ctx.closePath(); ctx.fill();
+  ctx.globalAlpha=0.55; ctx.strokeStyle=rawG; ctx.lineWidth=1.2;
+  ctx.beginPath(); data.forEach((v,i)=>i===0?ctx.moveTo(toX(i),toY(v)):ctx.lineTo(toX(i),toY(v))); ctx.stroke();
+
+  // Moving avg
+  if(movingAvg.length>1){
+    ctx.globalAlpha=1;
+    const avgG=ctx.createLinearGradient(pad.l,0,pad.l+pw,0);
+    avgG.addColorStop(0,'#b06aff'); avgG.addColorStop(1,'#00e5ff');
+    ctx.strokeStyle=avgG; ctx.lineWidth=2.5;
+    ctx.beginPath(); movingAvg.forEach((v,i)=>i===0?ctx.moveTo(toX(i),toY(v)):ctx.lineTo(toX(i),toY(v))); ctx.stroke();
+  }
+
+  ctx.globalAlpha=1;
+  // Axis labels
+  ctx.fillStyle='rgba(100,140,200,0.75)'; ctx.font='10px JetBrains Mono';
+  ctx.textAlign='right'; ctx.textBaseline='middle';
+  for(let i=0;i<=4;i++) ctx.fillText(Math.round(minY+(maxY-minY)*i/4), pad.l-5, pad.t+ph-ph*i/4);
+  ctx.textAlign='center'; ctx.textBaseline='top';
+  const ep=Math.max(1,Math.floor(data.length/5));
+  for(let i=0;i<data.length;i+=ep) ctx.fillText(i,toX(i),pad.t+ph+4);
+  ctx.fillText(data.length-1,toX(data.length-1),pad.t+ph+4);
+  ctx.save(); ctx.translate(14,pad.t+ph/2); ctx.rotate(-Math.PI/2); ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.fillStyle='rgba(100,140,200,0.5)'; ctx.font='10px Outfit'; ctx.fillText('Reward',0,0); ctx.restore();
+  ctx.fillStyle='rgba(100,140,200,0.5)'; ctx.textAlign='center'; ctx.font='10px Outfit'; ctx.fillText('Episodes',pad.l+pw/2,130-11);
+}
+
+// ======= TRAINING =======
+function startEpisode(){ state=env.reset(); episodeSteps=0; episodeTotalReward=0; }
+
+function doStep(){
+  if(!env||!agent) return;
+  const algo=document.getElementById('algo-select').value;
+  const a=agent.act(state);
+  const {state:ns,reward,done}=env.step(a);
+  agent.update(state,a,reward,ns,done,algo);
+  state=ns; episodeSteps++; episodeTotalReward+=reward;
+  if(done) endEpisode();
+  updateUI();
+  drawGrid();
+}
+
+function endEpisode(){
+  episodeCount++;
+  episodeRewards.push(episodeTotalReward);
+  const W2=20;
+  if(episodeRewards.length>=W2) movingAvg.push(episodeRewards.slice(-W2).reduce((a,b)=>a+b,0)/W2);
+  else movingAvg.push(episodeRewards.reduce((a,b)=>a+b,0)/episodeRewards.length);
+  if(env.agentPos[0]===env.goal[0]&&env.agentPos[1]===env.goal[1]){ successCount++; document.getElementById('stat-success').textContent=successCount; }
+  if(episodeTotalReward>bestReward){ bestReward=episodeTotalReward; document.getElementById('stat-best').textContent=Math.round(bestReward); }
+  agent.decayEps();
+  drawChart(); drawPolicy();
+  startEpisode();
+}
+
+function turboRun(n){
+  const algo=document.getElementById('algo-select').value;
+  for(let ep=0;ep<n;ep++){
+    let s=env.reset(),done=false,tot=0,st=0;
+    while(!done&&st<env.maxSteps){
+      const a2=agent.act(s);
+      const r2=env.step(a2);
+      agent.update(s,a2,r2.reward,r2.state,r2.done,algo);
+      s=r2.state; done=r2.done; tot+=r2.reward; st++;
+    }
+    episodeCount++;
+    episodeRewards.push(tot);
+    const W3=20;
+    if(episodeRewards.length>=W3) movingAvg.push(episodeRewards.slice(-W3).reduce((a,b)=>a+b,0)/W3);
+    else movingAvg.push(episodeRewards.reduce((a,b)=>a+b,0)/episodeRewards.length);
+    if(env.agentPos[0]===env.goal[0]&&env.agentPos[1]===env.goal[1]) successCount++;
+    if(tot>bestReward) bestReward=tot;
+    agent.decayEps();
+  }
+  env.reset(); state=env.stateIdx(); episodeSteps=0; episodeTotalReward=0;
+  document.getElementById('stat-success').textContent=successCount;
+  document.getElementById('stat-best').textContent=Math.round(bestReward);
+  updateUI(); drawGrid(); drawPolicy(); drawChart();
+}
+
+let turboHandle=null;
+function animLoop(){
+  if(!running) return;
+  if(loopDelay===0){
+    turboRun(50);
+    turboHandle=setTimeout(animLoop,0);
+  } else {
+    doStep();
+    loopTimer=setTimeout(animLoop,loopDelay);
+  }
+}
+
+function toggleTraining(){ running?stopTraining():startTraining(); }
+
+function startTraining(){
+  if(!env) initEnv();
+  running=true;
+  document.getElementById('btn-start').textContent='\u23F8 Pause';
+  setStatus('running','Training in progress...');
+  updateBadge('Training','#00e676');
+  animLoop();
+}
+
+function stopTraining(){
+  running=false;
+  clearTimeout(loopTimer); clearTimeout(turboHandle);
+  document.getElementById('btn-start').textContent='\u25B6 Resume';
+  setStatus('','Training paused');
+  updateBadge('Paused','#ffd600');
+}
+
+function stepOnce(){ if(running) stopTraining(); if(!env) initEnv(); doStep(); }
+
+function setSpeed(delay,sid){
+  loopDelay=delay;
+  document.querySelectorAll('.speed-btn').forEach(b=>b.classList.toggle('active',b.dataset.sid===sid));
+  if(running){ stopTraining(); startTraining(); }
+}
+
+function onMazeChange(){ resetAll(); }
+
+function resetAll(){
+  running=false; demoMode=false;
+  clearTimeout(loopTimer); clearTimeout(turboHandle);
+  episodeRewards=[]; movingAvg=[];
+  episodeCount=0; successCount=0; bestReward=-Infinity;
+  document.getElementById('stat-success').textContent='0';
+  document.getElementById('stat-best').textContent='\u2014';
+  document.getElementById('btn-start').textContent='\u25B6 Start Training';
+  document.getElementById('btn-demo').textContent='\uD83C\uDFAC Demo Best';
+  document.getElementById('btn-demo').onclick=runBestPolicy;
+  initEnv();
+  drawGrid(); drawPolicy(); drawChart();
+  setStatus('','Reset \u2014 ready to train');
+  updateBadge('Ready','#00e5ff');
+  updateUI();
+}
+
+function initEnv(){
+  const key=document.getElementById('maze-select').value;
+  env=new GridEnv(key);
+  agent=new QAgent(env.numStates);
+  syncParams();
+  initCanvas();
+  startEpisode();
+}
+
+function syncParams(){
+  if(!agent) return;
+  agent.alpha=+document.getElementById('lr-slider').value;
+  agent.gamma=+document.getElementById('gamma-slider').value;
+  agent.epsilon=+document.getElementById('eps-slider').value;
+  agent.epsilonDecay=+document.getElementById('decay-slider').value;
+}
+
+function updateParam(p){
+  const ids={lr:'lr-slider',gamma:'gamma-slider',eps:'eps-slider',decay:'decay-slider'};
+  const dis={lr:'lr-val',gamma:'gamma-val',eps:'eps-val',decay:'decay-val'};
+  const v=+document.getElementById(ids[p]).value;
+  const dec=p==='decay'?3:2;
+  document.getElementById(dis[p]).textContent=v.toFixed(dec);
+  if(agent){
+    if(p==='lr') agent.alpha=v;
+    if(p==='gamma') agent.gamma=v;
+    if(p==='eps') agent.epsilon=v;
+    if(p==='decay') agent.epsilonDecay=v;
+  }
+}
+
+// Demo best policy
+function runBestPolicy(){
+  if(running) stopTraining();
+  demoMode=true;
+  env.reset(); state=env.stateIdx();
+  const btn=document.getElementById('btn-demo');
+  btn.textContent='\u23F9 Stop Demo'; btn.onclick=stopDemo;
+  setStatus('running','\uD83C\uDFAC Demonstrating learned policy...');
+  function step(){
+    if(!demoMode){ btn.textContent='\uD83C\uDFAC Demo Best'; btn.onclick=runBestPolicy; return; }
+    const eps0=agent.epsilon; agent.epsilon=0;
+    const a2=agent.act(state);
+    const {state:ns,done}=env.step(a2);
+    agent.epsilon=eps0;
+    state=ns; updateUI(); drawGrid();
+    if(done){
+      demoMode=false;
+      btn.textContent='\uD83C\uDFAC Demo Best'; btn.onclick=runBestPolicy;
+      const won=env.agentPos[0]===env.goal[0]&&env.agentPos[1]===env.goal[1];
+      setStatus('done',won?'\uD83C\uDFC6 Goal reached! Policy successful.':'\u274C Policy did not reach goal \u2014 train more!');
+      if(won) showToast('\uD83C\uDFC6 Agent reached the goal!');
+    } else {
+      setTimeout(step,140);
+    }
+  }
+  step();
+}
+
+function stopDemo(){
+  demoMode=false;
+  document.getElementById('btn-demo').textContent='\uD83C\uDFAC Demo Best';
+  document.getElementById('btn-demo').onclick=runBestPolicy;
+  setStatus('','Demo stopped');
+}
+
+// ======= UI HELPERS =======
+function updateUI(){
+  document.getElementById('stat-episode').textContent=episodeCount;
+  document.getElementById('stat-steps').textContent=env?env.stepCount:0;
+  document.getElementById('stat-reward').textContent=env?Math.round(env.totalReward):0;
+  document.getElementById('stat-eps').textContent=agent?agent.epsilon.toFixed(3):'1.000';
+  document.getElementById('pos-text').textContent=env?`pos: [${env.agentPos[0]},${env.agentPos[1]}]`:'pos: [\u2014,\u2014]';
+}
+
+function setStatus(type,msg){
+  document.getElementById('run-indicator').className='status-indicator'+(type?' '+type:'');
+  document.getElementById('status-text').textContent=msg;
+}
+
+function updateBadge(label,color){
+  const b=document.getElementById('status-badge');
+  const alpha={'#00e676':'rgba(0,230,118,0.12)','#ffd600':'rgba(255,214,0,0.12)','#00e5ff':'rgba(0,229,255,0.12)','#ff1744':'rgba(255,23,68,0.12)'};
+  const border={'#00e676':'rgba(0,230,118,0.3)','#ffd600':'rgba(255,214,0,0.3)','#00e5ff':'rgba(0,229,255,0.3)','#ff1744':'rgba(255,23,68,0.3)'};
+  b.innerHTML=`<div class="badge-dot" style="background:${color}"></div> ${label}`;
+  b.style.background=alpha[color]||'rgba(0,229,255,0.12)';
+  b.style.borderColor=border[color]||'rgba(0,229,255,0.3)';
+  b.style.color=color;
+}
+
+function setView(v){
+  currentView=v;
+  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.toggle('active',b.dataset.view===v));
+  drawGrid();
+}
+
+let toastT;
+function showToast(msg){
+  const t=document.getElementById('toast');
+  t.textContent=msg; t.classList.add('show');
+  clearTimeout(toastT); toastT=setTimeout(()=>t.classList.remove('show'),3000);
+}
+
+function exportData(){
+  if(!agent){ showToast('\u26A0 Train first!'); return; }
+  const rows=['state,up,down,left,right,best_action'];
+  for(let s=0;s<agent.ns;s++){
+    const q=agent.Q[s], b=agent.greedyAction(s);
+    rows.push(`${s},${q[0].toFixed(4)},${q[1].toFixed(4)},${q[2].toFixed(4)},${q[3].toFixed(4)},${['Up','Down','Left','Right'][b]}`);
+  }
+  const a2=document.createElement('a');
+  a2.href=URL.createObjectURL(new Blob([rows.join('\n')],{type:'text/csv'}));
+  a2.download='q_table.csv'; a2.click();
+  showToast('\u2705 Q-Table exported!');
+}
+
+// Render loop for agent pulse animation
+function renderLoop(){
+  if(!running&&!demoMode) drawGrid();
+  requestAnimationFrame(renderLoop);
+}
+
+// Resize
+let resT;
+window.addEventListener('resize',()=>{
+  clearTimeout(resT);
+  resT=setTimeout(()=>{ if(env){ initCanvas(); drawGrid(); drawPolicy(); drawChart(); } },200);
+});
+
+// Keyboard shortcuts
+document.addEventListener('keydown',e=>{
+  if(e.target!==document.body) return;
+  if(e.code==='Space'){ e.preventDefault(); toggleTraining(); }
+  if(e.code==='KeyR') resetAll();
+  if(e.code==='KeyD') runBestPolicy();
+  if(e.code==='KeyT') turboRun(100);
+});
+
+// Show keyboard hints on desktop
+if(window.innerWidth>800) document.getElementById('kb-hints').style.display='block';
+
+// Init
+window.addEventListener('DOMContentLoaded',()=>{
+  initEnv();
+  drawGrid(); drawPolicy(); drawChart();
+  renderLoop();
+  setTimeout(()=>showToast('\uD83D\uDC4B Welcome! Press Space or click Start Training'),800);
+});
+</script>
+</body>
+</html>
